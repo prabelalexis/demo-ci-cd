@@ -19,4 +19,4 @@ jobs:
 
         steps:
             - name: Starting BO build je fais des test
-              run: ${{ matrix.lang }}
+              run: echo 'je test'

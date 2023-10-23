@@ -7,7 +7,7 @@ on:
         default: 'v1.x.x'
         type: string
       client:
-        description: 'Pays'
+        description: 'Client'
         required: true
         default: 'es'
         type: choice
