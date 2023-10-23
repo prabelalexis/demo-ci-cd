@@ -1,0 +1,50 @@
+name-template: 'v$RESOLVED_VERSION 🌈'
+tag-template: 'v$RESOLVED_VERSION'
+prerelease: true
+categories:
+  - title: ':rocket: Features'
+    labels:
+      - 'feature'
+  - title: ':bug: Bug Fixes'
+    labels:
+      - 'fix'
+      - 'bugfix'
+      - 'bug'
+  - title: ':bug: Hot Fixes'
+    labels:
+      - 'hotfix'
+  - title: ':angel: Maintenance / Refactoring'
+    labels:
+      - 'refactoring'
+  - title: ':book: Documentation'
+    labels:
+      - 'docs'
+  - title: ':mountain_bicyclist: CI / Tests'
+    labels:
+      - 'ci'
+  - title: ':blue_car: Merge'
+    labels:
+      - 'merge'
+change-template: '- $TITLE @$AUTHOR (#$NUMBER)'
+change-title-escapes: '\<*_&' # You can add # and @ to disable mentions, and add ` to disable code blocks.
+sort-by: title
+version-resolver:
+  major:
+    labels:
+      - 'major'
+  minor:
+    labels:
+      - 'feature'
+      - 'refactoring'
+      - 'ci'
+      - 'docs'
+  patch:
+    labels:
+      - 'bugfix'
+      - 'fix'
+      - 'hotfix'
+  default: patch
+template: |
+  ## Changes
+  
+  $CHANGES

@@ -1,0 +1,230 @@
+#!/bin/bash
+
+IFS=$'\n\t'
+ERROR_FOUND=false
+ERROR_FOUND_CS=false
+ERROR_FOUND_PHPSTAN=false
+ERROR_FOUND_PHPUNIT=false
+ERROR_CS=
+ERROR_PHPUNIT=
+WARNING_CS=
+
+RED=$'\033[31m'
+YELLOW=$'\033[33m'
+NC=$'\033[0m'
+
+REPO_ROOT=$(git rev-parse --show-toplevel)
+TMP_STAGED=".tmp-staged/"
+REAL_PATH=$(dirname $(readlink -f "$0"))
+ROOT_PATH=$(dirname $(dirname "${REAL_PATH}"))
+
+# --------------------------------------------------
+# Affiche un message en rouge et stop le commit
+# --------------------------------------------------
+function abort_message {
+    echo -e "\n${RED}/!\\ $1 /!\\${NC} \n"
+    exit 1;
+}
+
+# --------------------------------------------------
+# Verifie que php code sniffer est installé
+# --------------------------------------------------
+function check_phpcs {
+    if ! command -v vendor/bin/phpcs --version  >/dev/null 2>&1
+    then
+        abort_message "PHP CODE SNIFER not installed, please install it and retry."
+    fi
+}
+
+# --------------------------------------------------
+# Lancement du controle de code sniffer sur un
+# fichier
+# --------------------------------------------------
+function control_phpunit {
+    local phpunit_result=
+
+    phpunit_result=$(vendor/bin/phpunit 2>&1)
+    nb_error_phpunit=$(echo "$phpunit_result" | grep "FAILURES" | wc -l)
+    if [ $nb_error_phpunit -ne 0 ]
+    then
+        ERROR_PHPUNIT=$ERROR_PHPUNIT"\n $(echo "$phpunit_result" | grep "There were")\n$(echo "$phpunit_result" | grep ".php")"
+    fi
+}
+
+
+# --------------------------------------------------
+# Lancement du controle de code sniffer sur un
+# fichier
+# --------------------------------------------------
+function control_php_cs {
+    local cs_result=
+    local nb_warning=0
+    local nb_error=0
+
+    if [ $(echo $REPO_ROOT/$1 | grep "src/" | wc -l) -ne 0 ] ||
+       [ $(echo $REPO_ROOT/$1 | grep "tests/" | wc -l) -ne 0 ]
+    then
+        cs_result=$(vendor/bin/phpcs -n -p $TMP_STAGED$1  --report-width=50000 --standard="${ROOT_PATH}/phpcs.xml" 2>&1)
+
+        nb_warning=$(echo "$cs_result" | grep "WARNING" | wc -l)
+        if [ $nb_warning -ne 0 ]
+        then
+            WARNING_CS=$WARNING_CS"\n    $nb_warning in $1"
+        fi
+
+        nb_error=$(echo "$cs_result" | grep "ERROR" | wc -l)
+        if [ $nb_error -ne 0 ]
+        then
+            ERROR_CS=$ERROR_CS"\n    $nb_error in $1"
+        fi
+    fi
+}
+
+# Lancement du controle phpstan sur un
+# fichier
+# --------------------------------------------------
+function control_phpstan {
+
+    local phpstan_result=
+    local nb_warning=0
+    local nb_error=0
+
+    phpstan_result=$(vendor/bin/phpstan analyse $TMP_STAGED --xdebug)
+
+    nb_error=$(echo "$phpstan_result" | grep "Line" | wc -l)
+
+    if [ $nb_error -ne 0 ]
+    then
+        for file in $(get_changed_php_files)
+        do
+          ERROR_PHPSTAN=$ERROR_PHPSTAN"\n $file"
+        done
+    fi
+}
+
+# --------------------------------------------------
+# Affiche les code sniffer error si il y en a
+# --------------------------------------------------
+function print_error_cs {
+    if [[ "$ERROR_CS" ]]
+    then
+        echo -e "\n${RED}PHP CODE SNIFER ERROR found, commit aborted : ${NC}$ERROR_CS"
+        ERROR_FOUND_CS=true
+    fi
+}
+
+# --------------------------------------------------
+# Affiche les phpstan error si il y en a
+# --------------------------------------------------
+function print_error_phpstan {
+    if [[ "$ERROR_PHPSTAN" ]]
+    then
+        echo -e "\n${RED}PHPSTAN ERROR found, commit aborted : ${NC}$ERROR_PHPSTAN"
+        ERROR_FOUND_PHPSTAN=true
+    fi
+}
+
+
+# --------------------------------------------------
+# Affiche les code sniffer error si il y en a
+# --------------------------------------------------
+function print_error_phpunit {
+    if [[ "$ERROR_PHPUNIT" ]]
+    then
+        echo -e "\n${RED}PHPUNIT ERROR found, commit aborted : ${NC}$ERROR_PHPUNIT"
+        ERROR_FOUND_PHPUNIT=true
+    fi
+}
+
+# --------------------------------------------------
+# Affiche les code sniffer warning si il y en a
+# --------------------------------------------------
+function print_warning_cs {
+    if [[ "$WARNING_CS" ]]
+    then
+        echo -e "\n${YELLOW}PHP CODE SNIFER WARNING found, but non-blocking for commit : ${NC}$WARNING_CS"
+    fi
+}
+
+# --------------------------------------------------
+# Initialise le dossier temporaire des staged files
+# --------------------------------------------------
+function check_tmp_staged_dir {
+    if [ -e $TMP_STAGED ]
+    then
+        rm -Rf $TMP_STAGED
+    fi
+    mkdir -p $TMP_STAGED
+    chmod 777 -R $TMP_STAGED
+}
+
+# --------------------------------------------------
+# Supprime le dossier temporaire des staged files
+# --------------------------------------------------
+function clean_pre_commit {
+    rm -Rf $TMP_STAGED
+}
+
+# --------------------------------------------------
+# Recupère la liste des fichiers ajoutés dans la
+# staged area
+# --------------------------------------------------
+function get_changed_php_files {
+   git diff --cached --name-only --diff-filter=ACMR | grep ".php$"
+}
+
+# --------------------------------------------------
+# Charge un fichier de la staged area dans le
+# dossier temporaire des staged files
+# --------------------------------------------------
+function load_staged_file {
+    mkdir -p $TMP_STAGED$(dirname $1)
+    ID=$(git diff-index --cached HEAD $1 | cut -d " " -f4)
+    git cat-file blob $ID > "$TMP_STAGED$1"
+    chmod 777 -R $TMP_STAGED
+}
+
+function main {
+
+    local errors=
+    check_phpcs
+    check_tmp_staged_dir
+
+    control_phpunit
+    print_error_phpunit
+
+    if $ERROR_FOUND_PHPUNIT
+    then
+        abort_message "PLEASE FIX ERRORS, ADD NEW CHANGE AND COMMIT AGAIN"
+        exit 1
+    fi
+
+    for file in $(get_changed_php_files)
+    do
+        load_staged_file $file
+        control_php_cs $file
+    done
+
+    control_phpstan
+
+    clean_pre_commit
+
+    print_warning_cs
+    print_error_cs
+
+    print_error_phpstan
+
+    if $ERROR_FOUND_CS
+    then
+        abort_message "PLEASE FIX ERRORS, ADD NEW CHANGE AND COMMIT AGAIN"
+        exit 1
+    fi
+
+    if $ERROR_FOUND_PHPSTAN
+    then
+        abort_message "PLEASE FIX ERRORS, ADD NEW CHANGE AND COMMIT AGAIN"
+        exit 1
+    fi
+}
+
+main

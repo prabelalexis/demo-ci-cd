@@ -1,0 +1,7 @@
+feature: ['feature/*', 'feat/*']
+bugfix: ['fix/*', 'bugfix/*']
+hotfix: ['hotfix/*']
+refactoring: ['refactor/*', 'refacto/*', 'ref/*']
+ci: ['ci/*', 'tests/*', 'test/*']
+merge: ['develop']
+docs: ['doc/*', 'docs/*']

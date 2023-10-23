@@ -1,0 +1,30 @@
+on:
+  workflow_dispatch:
+    inputs:
+      tags:
+        description: 'Numéro du tags:'
+        required: true
+        default: 'v1.x.x'
+        type: string
+      client:
+        description: 'Pays'
+        required: true
+        default: 'es'
+        type: choice
+        options:
+          - psg
+          - lyon
+          - nxp
+
+name: PROD - Build and Push BO Images to ECR
+run-name: "PROD (${{ inputs.client }}) -- ${{ github.ref_name }} -- ${{ github.actor }}"
+
+jobs:
+    build-and-push:
+      name: Build and test
+      runs-on: ubuntu-latest
+
+      steps:
+        - name: Starting BO build
+          run: ${{ inputs.client }}
+
